@@ -14,9 +14,9 @@ export enum HttpCode {
   BAD_REQUEST = 400, // The server could not understand the request due to invalid syntax.
   UNAUTHORIZED = 401, // Operator does not have access to the specified resource.
   FORBIDDEN = 403, // Server understood the request, but it refuses to authorize it.
-  NotFound = 404, // The requested resource could not be found.
+  NOT_FOUND = 404, // The requested resource could not be found.
   METHOD_NOT_ALLOWED = 405, // The method specified in the Request-Line is not allowed for the target resource.
-  TIMOUT_ERROR = 408, // Used when the server does not receive a request from the client within the time that it expects the request to
+  TIMEOUT_ERROR = 408, // Used when the server does not receive a request from the client within the time that it expects the request to
   CONFLICT = 409, // The request conflict with current data.
   GONE = 410, // The requested resource is no longer available at    the server and there is no forwarding address.
   PRECONDITION_FAILED = 412, // The request failed because it did not meet one of the preconditions that is associated with
@@ -37,7 +37,7 @@ export enum Message {
   ZERO_RESULTS = "No records match query parameters.",
   NETWORK_ERROR = "Network Error",
   PARSE_ERROR = "Parse error",
-  TIMOUT_ERROR = "Timeout Error",
+  TIMEOUT_ERROR = "Timeout Error",
   UNAUTHORIZED = `Unauthorized: please login first`,
   FORBIDDEN = `Forbidden: you don't have permission to do this operation`,
   NOT_FOUND_REQUEST = `Resource not found: the server couldn't find the requested resource. It may be doing something wrong.`,
@@ -60,6 +60,13 @@ export enum Message {
   MAXIMUM_ITEMS_REACHED = "Maximum number of items reached for this category.",
   SERVER_ERROR = "Internal server error.",
   TOO_MANY_ATTEMPTS_TRY_LATER = "Too many failed attempts. Try again later.",
+  NOT_FOUND = "Resource not found.",
+  USED_NICK_PHONE = "The provided nickname or phone number is already in use.",
+  NO_MEMBER_NICK = "Please enter your member's nick.",
+  WRONG_PASSWORD = "Password incorrect.",
+  INCORRECT_PASSWORD_CONFIRMATION = "Passwords did not match.",
+  INCORRECT_PASSWORD_CURRENT = "Current password incorrect.",
+  INCORRECT_PASSWORD_NEW = "New password should be different than the current one.",
 }
 
 class Errors extends Error {
