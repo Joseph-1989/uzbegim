@@ -1,6 +1,8 @@
 import { Request, Response } from "express";
 import { T } from "../libs/types/common";
 import MemberService from "../models/Member.service";
+import { MemberType } from "../libs/enums/member.enum";
+import { MemberInput } from "../libs/types/member";
 
 const restaurantController: T = {};
 restaurantController.goHome = (req: Request, res: Response) => {
@@ -38,12 +40,20 @@ restaurantController.processLogin = (req: Request, res: Response) => {
   }
 };
 
-restaurantController.processSignup = (req: Request, res: Response) => {
+restaurantController.processSignup = async (req: Request, res: Response) => {
   try {
-    console.log("processSignup");
-    res.send("processSignup Page: DONE");
+    console.log("processSignup: this is restaurant.controller module!");
+    console.log("the body information contains in postman app: ", req.body);
+
+    const newMember = req.body; // get the data from client side to server side by using 'body-parser' middleware
+    newMember.memberType = MemberType.RESTAURANT; //set the default member type to be "Restaurant"
+
+    const memberService = new MemberService();
+    const result = await memberService.processSignup(newMember);
+    res.send(result);
   } catch (err) {
     console.error("Error : processSignup ", err);
+    res.send(err);
   }
 };
 
