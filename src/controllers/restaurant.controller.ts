@@ -4,6 +4,8 @@ import MemberService from "../models/Member.service";
 import { MemberType } from "../libs/enums/member.enum";
 import { LoginInput, MemberInput } from "../libs/types/member";
 
+const memberService = new MemberService(); //create an instance of service class
+
 const restaurantController: T = {};
 restaurantController.goHome = (req: Request, res: Response) => {
   try {
