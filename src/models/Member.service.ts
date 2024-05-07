@@ -1,9 +1,8 @@
 import Errors, { HttpCode, Message } from "../libs/Error";
 import { MemberType } from "../libs/enums/member.enum";
-
 import { LoginInput, Member, MemberInput } from "../libs/types/member";
 import MemberModel from "../schema/Member.model";
-
+import * as bcrypt from "bcryptjs";
 class MemberService {
   private readonly memberModel;
 
@@ -21,6 +20,11 @@ class MemberService {
     // bu ning vasifasi, undan oldingi methodga qo`shimcha holatda boshqa methodlar qo`shilib kelmasligini bildiradi.
     if (exist) throw new Errors(HttpCode.BAD_REQUEST, Message.CREATE_FAILED);
     console.log("exist:", exist);
+    console.log("before:", input.memberPassword);
+    const salt = await bcrypt.genSalt();
+    input.memberPassword = await bcrypt.hash(input.memberPassword, salt);
+    console.log("after:", input.memberPassword);
+
     try {
       const result = await this.memberModel.create(input);
       // const tempResult = new this.memberModel(input);
