@@ -1,8 +1,16 @@
-import Errors, { HttpCode, Message } from "../libs/Error";
+import { MemberStatus } from "../libs/enums/member.enum";
+import { shapeIntoMongooseObjectID } from "../libs/config";
 import { MemberType } from "../libs/enums/member.enum";
-import { LoginInput, Member, MemberInput } from "../libs/types/member";
+import Errors, { HttpCode, Message } from "../libs/Errors";
+import {
+  LoginInput,
+  Member,
+  MemberInput,
+  MemberUpdateInput,
+} from "../libs/types/member";
 import MemberModel from "../schema/Member.model";
 import * as bcrypt from "bcryptjs";
+
 class MemberService {
   private readonly memberModel;
 
@@ -11,6 +19,8 @@ class MemberService {
   }
 
   // SPA ============================================================= SPA SALOON
+
+  // signup =========================================================
 
   public async signup(input: MemberInput): Promise<Member> {
     const salt = await bcrypt.genSalt();
@@ -29,15 +39,20 @@ class MemberService {
   // Login =========================================================
 
   public async login(input: LoginInput): Promise<Member> {
-    // TODO:  consider member status later
     const member = await this.memberModel
       .findOne(
-        { memberNick: input.memberNick },
-        { memberNick: 1, memberPassword: 1 }
+        {
+          memberNick: input.memberNick,
+          memberStatus: { $ne: MemberStatus.DELETE },
+        },
+        { memberNick: 1, memberPassword: 1, memberStatus: 1 }
       )
       .exec();
 
     if (!member) throw new Errors(HttpCode.NOT_FOUND, Message.NO_MEMBER_NICK);
+    else if (member.memberStatus === MemberStatus.BLOCK) {
+      throw new Errors(HttpCode.FORBIDDEN, Message.BLOCKED_USER);
+    }
 
     const isMatch = await bcrypt.compare(
       input.memberPassword,
@@ -49,7 +64,80 @@ class MemberService {
     return await this.memberModel.findById(member._id).lean().exec();
   }
 
+  // getMemberDetail =========================================================
+
+  public async getMemberDetail(member: Member): Promise<Member> {
+    const memberId = shapeIntoMongooseObjectID(member._id);
+    const result = await this.memberModel
+      .findOne({ _id: memberId, memberStatus: MemberStatus.ACTIVE })
+      .exec();
+
+    if (!result) throw new Errors(HttpCode.NOT_FOUND, Message.NO_DATA_FOUND);
+
+    return result;
+  }
+
+  // updateMember =========================================================
+
+  public async updateMember(
+    member: Member,
+    input: MemberUpdateInput
+  ): Promise<Member> {
+    const memberId = shapeIntoMongooseObjectID(member._id);
+    const result = await this.memberModel
+      .findOneAndUpdate({ _id: memberId }, input, { new: true })
+      .exec();
+    if (!result) throw new Errors(HttpCode.NOT_MODIFIED, Message.UPDATE_FAILED);
+    return result;
+  }
+
+  // getTopUsers =========================================================
+
+  public async getTopUsers(): Promise<Member[]> {
+    const result = await this.memberModel
+      .find({
+        memberStatus: MemberStatus.ACTIVE,
+        memberPoints: { $gte: 1 },
+      })
+      .sort({ memberPoints: -1 })
+      .limit(4)
+      .exec();
+    if (!result) throw new Errors(HttpCode.NOT_FOUND, Message.NO_DATA_FOUND);
+    return result;
+  }
+
+  // getRestaurant =========================================================
+
+  public async getRestaurant(): Promise<Member[]> {
+    const result = await this.memberModel
+      .findOne({ memberType: MemberType.RESTAURANT })
+      .lean()
+      .exec();
+    if (!result) throw new Errors(HttpCode.NOT_FOUND, Message.NO_DATA_FOUND);
+    return result;
+  }
+
+  // addUserPoint =========================================================
+
+  public async addUserPoint(member: Member, point: number): Promise<Member> {
+    const memberId = shapeIntoMongooseObjectID(member._id);
+
+    return await this.memberModel
+      .findOneAndUpdate(
+        {
+          _id: memberId,
+          memberType: MemberType.USER,
+          memberStatus: MemberStatus.ACTIVE,
+        },
+        { $inc: { memberPoints: point } },
+        { new: true }
+      )
+      .exec();
+  }
+
   // BSSR ===================================================== USSR
+
+  // processSignup =========================================================
 
   public async processSignup(input: MemberInput): Promise<Member> {
     const exist = await this.memberModel
@@ -57,21 +145,22 @@ class MemberService {
         memberType: MemberType.RESTAURANT,
       })
       .exec();
-    // bu .exec(); method ini qo`ymasa ham, undan oldin ishlatilayotgan mongoose dagi method ishlayveradi.
-    // bu ning vasifasi, undan oldingi methodga qo`shimcha holatda boshqa methodlar qo`shilib kelmasligini bildiradi.
-    if (exist) throw new Errors(HttpCode.BAD_REQUEST, Message.CREATE_FAILED);
     console.log("exist:", exist);
-    console.log("before:", input.memberPassword);
-    const salt = await bcrypt.genSalt();
-    input.memberPassword = await bcrypt.hash(input.memberPassword, salt);
-    console.log("after:", input.memberPassword);
+    // bu .exec(); methodini qo`ymasa ham, undan oldin ishlatilayotgan mongoose dagi method ishlayveradi.
+    // buning vasifasi, undan oldingi methodga qo`shimcha holatda boshqa methodlar qo`shilib kelmasligini bildiradi.
+    if (exist) throw new Errors(HttpCode.BAD_REQUEST, Message.CREATE_FAILED); //  Only one restaurant can be created in the system
 
+    const salt = await bcrypt.genSalt();
+    console.log("salt: ", salt);
+    input.memberPassword = await bcrypt.hash(input.memberPassword, salt);
+
+    console.log("input", input);
     try {
-      const result = await this.memberModel.create(input);
-      // const tempResult = new this.memberModel(input);
-      // const result = await tempResult.save();
-      console.log("This info is located in Member.service module!");
-      result.memberPassword = "";
+      const result = await this.memberModel.create(input); //  회원가입시 비번을 hash화하여 DB에 저장한다.
+      console.log("input", input);
+
+      result.memberPassword = ""; // 클라이언트로 보내기전에는    비밀번호를 제거해주자!
+      console.log("result.memberPassword: ", result.memberPassword);
       return result;
     } catch (err) {
       throw new Errors(HttpCode.BAD_REQUEST, Message.CREATE_FAILED);
@@ -87,30 +176,75 @@ class MemberService {
         { memberNick: 1, memberPassword: 1 }
       )
       .exec();
+
     if (!member) throw new Errors(HttpCode.NOT_FOUND, Message.NO_MEMBER_NICK);
-    const isMatch = input.memberPassword === member.memberPassword;
-    console.log("isMatch : ", isMatch);
-    console.log("input:", input);
-    console.log("input.memberPassword:", input.memberPassword);
-    console.log("member:", member);
-    console.log("member.memberPassword:", member.memberPassword);
+
+    const isMatch = await bcrypt.compare(
+      //bcrypt compare qilyapti,
+      input.memberPassword,
+      member.memberPassword
+    );
+
     if (!isMatch) {
-      console.log("Errors:", Errors);
       throw new Errors(HttpCode.UNAUTHORIZED, Message.WRONG_PASSWORD);
     }
 
-    console.log("member._id: ", member._id);
-    console.log("this.memberModel:", this.memberModel);
-    console.log("this.memberModel.schema:", this.memberModel.schema);
     return await this.memberModel.findById(member._id).exec();
+  }
 
-    // const result = await this.memberModel.findById(member._id).exec();
-    // console.log("result: ", result);
-    // console.log(member._id, "=====", result._id);
-    // console.log("await:", await);
-    // console.log("login member : ", member);
-    // return result;
+  // checkAuthSession =========================================================
+
+  public async checkAuthSession(input: LoginInput): Promise<Member> {
+    const member = await this.memberModel
+      .findOne(
+        { memberNick: input.memberNick },
+        { memberNick: 1, memberPassword: 1 }
+      )
+      .exec();
+
+    if (!member) throw new Errors(HttpCode.NOT_FOUND, Message.NO_MEMBER_NICK);
+
+    const isMatch = await bcrypt.compare(
+      //bcrypt compare qilyapti,
+      input.memberPassword,
+      member.memberPassword
+    );
+
+    if (!isMatch) {
+      throw new Errors(HttpCode.UNAUTHORIZED, Message.WRONG_PASSWORD);
+    }
+
+    return await this.memberModel.findById(member._id).exec();
+  }
+
+  // getUsers =========================================================
+
+  public async getUsers(): Promise<Member[]> {
+    const result = await this.memberModel
+      .find({
+        memberType: MemberType.USER,
+      })
+      .exec();
+    console.log("MemberModel: result:", result);
+    if (!result) throw new Errors(HttpCode.NOT_FOUND, Message.NO_DATA_FOUND); //  Only one restaurant can be created in the system
+
+    return result;
+  }
+
+  // updateChosenUser =========================================================
+
+  public async updateChosenUser(input: MemberUpdateInput): Promise<Member> {
+    input._id = shapeIntoMongooseObjectID(input._id);
+    const result = await this.memberModel
+      .findByIdAndUpdate({ _id: input._id }, input, { new: true })
+      .exec();
+    console.log("MemberModel: result:", result);
+    if (!result) throw new Errors(HttpCode.NOT_MODIFIED, Message.UPDATE_FAILED); //  Only one restaurant can be created in the system
+
+    return result;
   }
 }
 
 export default MemberService;
+
+// BIZ DOIM METHODLARNI ASYNC KO'RINISHDA YOZAMIZ, CHUNKI DATABASEDAN KO'P MUROJAATLAR BO'LASI.
