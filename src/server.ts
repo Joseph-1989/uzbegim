@@ -2,9 +2,10 @@ import dotenv from "dotenv";
 // const dotenv = require("dotenv");
 
 dotenv.config();
-import app from "./app";
+
 // CLUSTER => DATABASE => COLLECTION => DOCUMENTS
 import mongoose from "mongoose";
+import server from "./app";
 mongoose.set("strictQuery", true);
 
 mongoose
@@ -16,7 +17,7 @@ mongoose
     console.log("MongoDB connected successfully...");
     const PORT = process.env.PORT ?? 3003; // Attempts to retrieve a port number from the PORTenvironment variable.
     // If PORTis undefined, defaults to port 3003.
-    app.listen(PORT, () => {
+    server.listen(PORT, () => {
       // Starts listening for incoming HTTP  requests on the specified host and port.
       console.info(`Server is running successfully on port ${PORT}`);
       console.info(`Admin project on http://localhost:${PORT}/admin \n`);

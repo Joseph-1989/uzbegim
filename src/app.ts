@@ -6,7 +6,8 @@ import routerAdmin from "./router-admin"; //Router for admin pages
 import morgan from "morgan"; //Logging middleware for Express 4
 import { MORGAN_FORMAT } from "./libs/config"; //Config variable holding the logging format
 import cookieParser from "cookie-parser";
-
+import { Server as SocketIOServer } from "socket.io";
+import http from "http";
 import session from "express-session"; //Simple session middleware for node.js
 import ConnectMongoDB from "connect-mongodb-session"; //Store sessions in MongoDB using connect-mongodb-session
 import { T } from "./libs/types/common";
@@ -59,7 +60,26 @@ app.set("view engine", "ejs"); // set template engine ejs
 app.use("/admin", routerAdmin); //SSR: EJS  render on server side
 app.use("/", router); //SPA : REACT  render on client side
 
-export default app; //module     exportation
+const server = http.createServer(app);
+const io = new SocketIOServer(server, {
+  cors: {
+    origin: true,
+    credentials: true,
+  },
+});
+
+let summaryClient = 0;
+io.on("connection", (socket) => {
+  summaryClient++;
+  console.log(`Connection & total [${summaryClient}]`);
+
+  socket.on("disconnect", () => {
+    summaryClient--;
+    console.log(`Disconnection & total [${summaryClient}]`);
+  });
+});
+
+export default server;
 
 //The use method is a fundamental part of Express,
 //and it is used for adding middleware to the application's
