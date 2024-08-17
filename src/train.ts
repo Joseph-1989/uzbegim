@@ -32,3 +32,40 @@ QAYSI URL NI ISHLATAYOTGANIMIZ VA ETC LARNI LOG QILYAPMIZ.
 // 1. TRADITIONAL API, ODATDA ODDIYGINA API HAM DEB NOMLANADI,
 // 2. REST API
 // 3. GRAPHQL API
+
+/*
+ * Request:
+ * Traditional Api
+ * Rest Api
+ * GraphQL Api
+ * ...
+ */
+
+/* Frontend Development:
+ * Traditional FD => SSR => EJS
+ * Modern FD => SPA => REACT
+ */
+
+/* Cookies:
+ * request join
+ * self destroy
+ */
+
+/* Validation:
+ * Frontend validation
+ * Backend validation
+ * Database validation
+ */
+
+/*
+ * PM2 COMMANDS:
+ * pm2 ls
+ * pm2 start dist/server.js --name=UZBEGIM
+ * pm2 start "npm run start:prod" --name=UZBEGIM
+ * pm2 start "yarn run start:prod" --name=UZBEGIM
+ * pm2 stop id
+ * pm2 delete id
+ * pm2 restart id
+ * pm2 monit
+ * pm2 kill (pm2 da run bo`lgan barcha loyihalarni o`chirib yuboradi)
+ */
