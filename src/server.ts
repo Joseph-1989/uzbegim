@@ -1,11 +1,8 @@
-import dotenv from "dotenv";
-// const dotenv = require("dotenv");
+// import dotenv from "dotenv";
+// dotenv.config({
+//   path: process.env.NODE_ENV === "production" ? ".env.production" : ".env",
+// });
 
-dotenv.config({
-  path: process.env.NODE_ENV === "production" ? ".env.production" : ".env",
-});
-
-// CLUSTER => DATABASE => COLLECTION => DOCUMENTS
 import mongoose from "mongoose";
 import server from "./app";
 mongoose.set("strictQuery", true);
@@ -13,9 +10,6 @@ mongoose.set("strictQuery", true);
 mongoose
   .connect(process.env.MONGO_URL as string, {})
   .then((data) => {
-    //data bu mongoose.connect methodining Promise ning resolve parametrini bildiradi
-    // The `data` parameter might not be used in this block, or it might represent some internal
-    // information about the connection (though it's not typical to use `data` for this purpose).
     console.log("MongoDB connected successfully...");
     const PORT = process.env.PORT ?? 3003; // Attempts to retrieve a port number from the PORTenvironment variable.
     // If PORTis undefined, defaults to port 3003.

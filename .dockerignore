@@ -1,0 +1,12 @@
+node_modules
+dist
+.env
+.env.production
+.git
+.DS_Store
+npm-debug.log
+Dockerfile
+.dockerignore
+deploy.sh
+uploads
+

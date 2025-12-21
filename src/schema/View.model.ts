@@ -1,4 +1,5 @@
-import mongoose, { Schema } from "mongoose";
+import mongoose from "mongoose";
+const Schema = mongoose.Schema;
 import { ViewGroup } from "../libs/enums/view.enum";
 
 const viewSchema = new Schema(
