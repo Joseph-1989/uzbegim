@@ -45,9 +45,6 @@ COPY --from=builder --chown=nestjs:nodejs /app/dist ./dist
 # Copy package.json for runtime reference
 COPY --chown=nestjs:nodejs package.json ./
 
-# Copy environment file for production (as fallback)
-COPY --chown=nestjs:nodejs .env.production ./
-
 # Create uploads directory structure (uploads is git-ignored, so we create it here)
 RUN mkdir -p uploads/members uploads/products && chown -R nestjs:nodejs uploads
 
