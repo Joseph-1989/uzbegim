@@ -1,0 +1,579 @@
+---
+title: File Upload and Image Processing Patterns
+description: Documentation of file upload handling, image compression, and storage patterns using Sharp library in the Netagram project
+tags:
+  [
+    file-upload,
+    image-processing,
+    sharp,
+    multer,
+    storage,
+    multi-image,
+    feed,
+    group,
+  ]
+---
+
+# File Upload and Image Processing Patterns
+
+## Overview
+
+The project handles file uploads through GraphQL with manual processing using the Sharp library for image compression and optimization. The system supports both single image uploads (business cards, groups) and multi-image uploads (feeds).
+
+## Upload Flow
+
+### 1. GraphQL Upload Integration
+
+Files are received through GraphQL resolvers using the `GraphQLUpload` type:
+
+```typescript
+// Single file upload (Business Card)
+@Mutation(() => BusinessCardResponseDto)
+async createBusinessCard(
+  @Args('createBusinessCardInput') createBusinessCardDto: CreateBusinessCardDto,
+  @Args('profileImage', { type: () => GraphQLUpload }) profileImage?: FileUpload,
+): Promise<BusinessCardResponseDto>
+
+// Single file upload (Group)
+@Mutation(() => GroupResponseDto)
+async createGroup(
+  @Args('input') input: CreateGroupDto,
+): Promise<GroupResponseDto>
+
+// Multiple file upload (Feed)
+@Mutation(() => FeedResponseDto)
+async createFeed(@Args('input') input: CreateFeedDto): Promise<FeedResponseDto>
+```
+
+### 2. File Processing Pipeline
+
+```typescript
+// 1. Convert GraphQL Upload to Buffer
+const uploadedFile = await profileImage;
+const fileBuffer = await this.streamToBuffer(uploadedFile.createReadStream());
+
+// 2. Create Mock Multer File for Validation
+const mockFile: Express.Multer.File = {
+  buffer: fileBuffer,
+  originalname: uploadedFile.filename,
+  mimetype: uploadedFile.mimetype,
+  encoding: uploadedFile.encoding,
+  fieldname: 'file',
+  size: fileBuffer.length,
+} as Express.Multer.File;
+
+// 3. Validate File
+if (!this.validateImage(mockFile)) {
+  throw new BadRequestException(Message.INVALID_IMAGE_FORMAT);
+}
+
+// 4. Compress Image
+const compressedBuffer = await this.compressImage(fileBuffer);
+
+// 5. Generate Unique Filename
+const imageName = getSerialForImage(uploadedFile.filename);
+
+// 6. Save to Storage
+const uploadDir = 'uploads/business-card';
+const filepath = `${uploadDir}/${imageName}`;
+```
+
+## Image Processing with Sharp
+
+### Compression Settings
+
+```typescript
+private async compressImage(buffer: Buffer): Promise<Buffer> {
+  return await sharp(buffer).jpeg({ quality: 40 }).toBuffer();
+}
+```
+
+**Key Settings:**
+
+- **Format:** Always convert to JPEG
+- **Quality:** 40% (aggressive compression for web optimization)
+- **Input:** Accepts any supported image format
+- **Output:** Returns compressed Buffer
+
+### Supported Operations
+
+- Format conversion (any → JPEG)
+- Quality compression
+- Buffer processing (no file system operations)
+
+## File Validation
+
+### MIME Type Validation
+
+```typescript
+// From config.ts
+export const validMimeTypes = ['image/jpeg', 'image/jpg', 'image/png'];
+```
+
+### File Size Validation
+
+```typescript
+private validateImage(file: Express.Multer.File): boolean {
+  const maxSize = 10 * 1024 * 1024; // 10MB
+
+  if (!validMimeTypes.includes(file.mimetype)) {
+    return false;
+  }
+
+  if (file.size > maxSize) {
+    return false;
+  }
+
+  return true;
+}
+```
+
+**Validation Rules:**
+
+- **Allowed Types:** JPEG, JPG, PNG only
+- **Maximum Size:** 10MB
+- **Validation:** Both MIME type and file size checked
+
+## Storage Patterns
+
+### Directory Structure
+
+```
+uploads/
+├── business-card/          # Business card profile images
+├── business-cards/         # Alternative upload location
+├── feed/                   # Feed images organized by user
+│   └── {userId}/           # User-specific feed images
+├── group/                  # Group images
+└── user-profile/           # User profile images
+    └── {userId}/           # User-specific profile images
+```
+
+### File Naming Convention
+
+```typescript
+// From config.ts
+export const getSerialForImage = (originalName: string): string => {
+  const ext = path.extname(originalName);
+  return `${uuidv4()}${ext}`;
+};
+```
+
+**Naming Pattern:**
+
+- **Format:** `{UUID}.{original-extension}`
+- **Example:** `2e76fc6b-bb60-4f8f-a5c7-9a0d3062531d.png`
+- **Benefits:** Prevents naming conflicts, ensures uniqueness
+
+### File Storage Process
+
+```typescript
+// 1. Create Directory
+await fs.mkdir(uploadDir, { recursive: true });
+
+// 2. Write Compressed Buffer
+const result = await new Promise((resolve, reject) => {
+  const writeStream = createWriteStream(filepath);
+  writeStream.write(compressedBuffer);
+  writeStream.end();
+  writeStream.on('finish', () => resolve(true));
+  writeStream.on('error', () => reject(false));
+});
+
+// 3. Update Database
+savedCard.profileImage = filepath;
+savedCard.profileImageUrl = `/${filepath}`;
+await this.businessCardRepository.save(savedCard);
+```
+
+## Single Image Upload Patterns
+
+### Business Card Images
+
+```typescript
+// Single image upload for business cards
+async createBusinessCard(
+  createBusinessCardDto: CreateBusinessCardDto,
+  profileImage?: FileUpload,
+): Promise<BusinessCardResponseDto> {
+  const { profileImage, ...cardData } = createBusinessCardDto;
+
+  if (profileImage) {
+    const uploadedFile = await profileImage;
+    const fileBuffer = await this.streamToBuffer(uploadedFile.createReadStream());
+
+    // Validate and compress
+    const compressedBuffer = await this.compressImage(fileBuffer);
+    const imageName = getSerialForImage(uploadedFile.filename);
+    const uploadDir = 'uploads/business-card';
+    const filepath = `${uploadDir}/${imageName}`;
+
+    // Save to filesystem and database
+    await this.saveImageFile(compressedBuffer, filepath);
+    savedCard.profileImage = filepath;
+    savedCard.profileImageUrl = `/${filepath}`;
+  }
+}
+```
+
+### Group Images
+
+```typescript
+// Single image upload for groups
+async createGroup(createGroupDto: CreateGroupDto): Promise<GroupResponseDto> {
+  const { groupImage, ...groupData } = createGroupDto;
+
+  if (groupImage) {
+    const uploadedFile = await groupImage;
+    const fileBuffer = await this.streamToBuffer(uploadedFile.createReadStream());
+
+    // Validate and compress
+    const compressedBuffer = await this.compressImage(fileBuffer);
+    const imageName = getSerialForImage(uploadedFile.filename);
+    const uploadDir = 'uploads/group';
+    const filepath = `${uploadDir}/${imageName}`;
+
+    // Save to filesystem and database
+    await this.saveImageFile(compressedBuffer, filepath);
+    savedGroup.groupImage = filepath;
+    savedGroup.groupImageUrl = `/${filepath}`;
+  }
+}
+```
+
+## Multi-Image Upload Patterns
+
+### Feed Multi-Image System
+
+```typescript
+// Process multiple images for feed posts
+private async processImages(
+  images: Promise<any>[],
+  userId: string,
+): Promise<{ paths: string[]; urls: string[] }> {
+  const paths: string[] = [];
+  const urls: string[] = [];
+
+  for (const imagePromise of images) {
+    const uploadedFile = await imagePromise;
+    const fileBuffer = await this.streamToBuffer(uploadedFile.createReadStream());
+
+    // Validate and compress each image
+    const compressedBuffer = await this.compressImage(fileBuffer);
+    const imageName = getSerialForImage(uploadedFile.filename);
+    const uploadDir = `uploads/feed/${userId}`;
+    const filepath = `${uploadDir}/${imageName}`;
+
+    await fs.mkdir(uploadDir, { recursive: true });
+
+    // Save compressed image
+    const result = await new Promise((resolve, reject) => {
+      const writeStream = createWriteStream(filepath);
+      writeStream.write(compressedBuffer);
+      writeStream.end();
+      writeStream.on('finish', () => resolve(true));
+      writeStream.on('error', () => reject(false));
+    });
+
+    if (!result) throw new Error(Message.UPLOAD_FAILED);
+
+    paths.push(filepath);
+    urls.push(`/${filepath}`);
+  }
+
+  return { paths, urls };
+}
+```
+
+### Feed Image Limits and Validation
+
+```typescript
+// Maximum 5 images per feed
+if (images && images.length > 0) {
+  if (images.length > 5) {
+    throw new BadRequestException(Message.MAX_IMAGES_EXCEEDED);
+  }
+
+  const processedImages = await this.processImages(images, dto.userId);
+  savedFeed.images = processedImages.paths;
+  savedFeed.imageUrls = processedImages.urls;
+  await this.feedRepository.save(savedFeed);
+}
+```
+
+## Database Integration
+
+### Single Image Storage
+
+```typescript
+// Business Card - Single image
+@Entity('business_card')
+export class BusinessCard {
+  @Column({ type: 'varchar', length: 500, nullable: true })
+  profileImage: string; // File path
+
+  @Column({ type: 'varchar', length: 500, nullable: true })
+  profileImageUrl: string; // URL for serving
+}
+
+// Group - Single image
+@Entity('group')
+export class Group {
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  groupImage: string; // File path
+
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  groupImageUrl: string; // URL for serving
+}
+```
+
+### Multi-Image Storage
+
+```typescript
+// Feed - Multiple images
+@Entity('feed')
+export class Feed {
+  @Column({ type: 'text', array: true, nullable: true })
+  images?: string[]; // Array of file paths
+
+  @Column({ type: 'text', array: true, nullable: true })
+  imageUrls?: string[]; // Array of URLs
+}
+```
+
+### URL Generation
+
+```typescript
+// Single image (Business Card/Group)
+// Database stores relative path
+profileImage: 'uploads/business-card/uuid.png';
+// URL generated for serving
+profileImageUrl: '/uploads/business-card/uuid.png';
+
+// Multiple images (Feed)
+// Database stores array of paths
+images: ['uploads/feed/user123/uuid1.jpg', 'uploads/feed/user123/uuid2.jpg'];
+// URLs generated for serving
+imageUrls: [
+  '/uploads/feed/user123/uuid1.jpg',
+  '/uploads/feed/user123/uuid2.jpg',
+];
+```
+
+## File Cleanup Patterns
+
+### Update Operations
+
+When updating images, old files are automatically deleted:
+
+```typescript
+// Single image update (Business Card)
+// Delete old image if exists
+if (existingCard.profileImage) {
+  await this.deleteProfileImageFile(existingCard.profileImage);
+}
+
+// Save new image
+existingCard.profileImage = filepath;
+existingCard.profileImageUrl = `/${filepath}`;
+
+// Single image update (Group)
+if (existingGroup.groupImage) {
+  await this.deleteGroupImageFile(existingGroup.groupImage);
+}
+
+// Multiple image update (Feed)
+// Remove specified images from filesystem
+for (const index of dto.removeImageIndices) {
+  if (currentImages[index]) {
+    await this.deleteFile(currentImages[index]);
+  }
+}
+
+// Update images array
+const newImages = currentImages.filter(
+  (_, index) => !dto.removeImageIndices!.includes(index),
+);
+feed.images = [...newImages, ...processedImages.paths];
+```
+
+### Delete Operations
+
+When deleting entities, associated files are cleaned up:
+
+```typescript
+// Single image cleanup (Business Card)
+async deleteBusinessCard(id: string): Promise<void> {
+  const businessCard = await this.businessCardRepository.findOne({ where: { id } });
+
+  if (businessCard.profileImage) {
+    await this.deleteProfileImageFile(businessCard.profileImage);
+  }
+
+  await this.businessCardRepository.remove(businessCard);
+}
+
+// Single image cleanup (Group)
+async deleteGroup(groupId: string): Promise<boolean> {
+  const group = await this.groupRepository.findOne({ where: { id: groupId } });
+
+  if (group.groupImage) {
+    await this.deleteGroupImageFile(group.groupImage);
+  }
+
+  await this.groupRepository.remove(group);
+  return true;
+}
+
+// Multiple image cleanup (Feed)
+async deleteFeed(feedId: string, userId: string): Promise<boolean> {
+  const feed = await this.feedRepository.findOne({ where: { id: feedId } });
+
+  // Delete all images from filesystem
+  if (feed.images && feed.images.length > 0) {
+    for (const imagePath of feed.images) {
+      await this.deleteFile(imagePath);
+    }
+  }
+
+  await this.feedRepository.remove(feed);
+  return true;
+}
+```
+
+### Cleanup Implementation
+
+```typescript
+private async deleteProfileImageFile(filepath: string): Promise<void> {
+  try {
+    await fs.unlink(filepath);
+  } catch (error) {
+    // File might not exist, ignore error
+  }
+}
+
+private async deleteGroupImageFile(filepath: string): Promise<void> {
+  try {
+    await fs.unlink(filepath);
+  } catch (error) {
+    // File might not exist, ignore error
+  }
+}
+
+private async deleteFile(filepath: string): Promise<void> {
+  try {
+    await fs.unlink(filepath);
+  } catch (error) {
+    // File might not exist, ignore error
+  }
+}
+```
+
+## Error Handling
+
+### Upload Failures
+
+```typescript
+if (!result) throw new Error(Message.UPLOAD_FAILED);
+```
+
+### Validation Errors
+
+```typescript
+if (!this.validateImage(mockFile)) {
+  throw new BadRequestException(Message.INVALID_IMAGE_FORMAT);
+}
+```
+
+### Error Messages
+
+Standardized error messages from `Message` enum:
+
+- `UPLOAD_FAILED` - General upload failure
+- `INVALID_IMAGE_FORMAT` - Invalid file type
+- `IMAGE_TOO_LARGE` - File size exceeded
+- `MAX_IMAGES_EXCEEDED` - Feed image limit exceeded
+
+## Stream Processing
+
+### GraphQL Upload to Buffer
+
+```typescript
+private async streamToBuffer(stream: NodeJS.ReadableStream): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    stream.on('data', (chunk: Buffer) => chunks.push(chunk));
+    stream.on('end', () => resolve(Buffer.concat(chunks)));
+    stream.on('error', reject);
+  });
+}
+```
+
+This utility converts GraphQL Upload streams to buffers for Sharp processing.
+
+## Performance Considerations
+
+- **Compression:** Aggressive JPEG compression (40% quality) for fast loading
+- **Format Standardization:** All images converted to JPEG for consistency
+- **Unique Naming:** UUID-based naming prevents conflicts
+- **Cleanup:** Automatic cleanup prevents storage bloat
+- **Validation:** Early validation prevents processing invalid files
+- **Multi-Image Support:** Up to 5 images per feed with individual processing
+- **User Organization:** Images organized by userId for efficient management
+- **Array Storage:** Database arrays for multiple image paths and URLs
+
+## Feed-Specific Considerations
+
+### Image Limits
+
+- **Maximum Images:** 5 images per feed post
+- **Validation:** Early validation prevents exceeding limits
+- **Error Handling:** Clear error messages for limit violations
+
+### Directory Organization
+
+- **User-Specific:** `uploads/feed/{userId}/` structure
+- **Scalability:** Prevents single directory from becoming too large
+- **Cleanup:** User-specific cleanup when deleting feeds
+
+### Database Storage
+
+- **Array Fields:** PostgreSQL text arrays for image paths and URLs
+- **Synchronization:** Paths and URLs arrays must stay synchronized
+- **Indexing:** Consider indexes on image-related queries
+
+### Image Update Patterns
+
+- **Remove by Index:** `removeImageIndices` array for selective removal
+- **Add New Images:** `addImages` array for adding new images
+- **Array Synchronization:** Both paths and URLs arrays updated together
+- **File Cleanup:** Removed images deleted from filesystem
+
+## Group-Specific Considerations
+
+### Single Image Support
+
+- **One Image Per Group:** Groups support one image maximum
+- **Optional Images:** Group images are optional
+- **Update Handling:** Old images replaced during updates
+
+### Directory Structure
+
+- **Centralized Storage:** All group images in `uploads/group/`
+- **Simple Cleanup:** Single file deletion when group is removed
+- **Consistent Naming:** UUID-based naming for all group images
+
+## Business Card Considerations
+
+### Profile Image Support
+
+- **Single Image:** One profile image per business card
+- **Template Integration:** Images work with all template types
+- **Update Patterns:** Old images replaced during updates
+- **Optional Images:** Profile images are optional
+
+### Storage Efficiency
+
+- **Compressed Storage:** All images compressed to 40% quality
+- **Format Consistency:** All images converted to JPEG
+- **Path Management:** Both file paths and serving URLs stored

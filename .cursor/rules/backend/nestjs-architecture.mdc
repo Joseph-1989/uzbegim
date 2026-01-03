@@ -1,0 +1,757 @@
+---
+title: NestJS Architecture Patterns
+description: Documentation of NestJS module structure, service patterns, and GraphQL resolver conventions used in the Netagram project
+tags:
+  [
+    nestjs,
+    architecture,
+    graphql,
+    modules,
+    services,
+    resolvers,
+    feed,
+    friend,
+    group,
+    social-features,
+  ]
+---
+
+# NestJS Architecture Patterns
+
+## Module Structure
+
+### Component Module Pattern
+
+The project uses a centralized `ComponentModule` that imports all feature modules:
+
+```typescript
+// src/components/component.module.ts
+@Module({
+  imports: [
+    AuthModule,
+    BusinessCardModule,
+    UserProfileModule,
+    FriendModule,
+    GroupModule,
+    FeedModule,
+  ],
+})
+export class ComponentModule {}
+```
+
+### Feature Module Organization
+
+Each feature follows the pattern:
+
+- `{feature}.module.ts` - Module definition with imports/exports
+- `{feature}.service.ts` - Business logic and data access
+- `{feature}.resolver.ts` - GraphQL resolvers
+
+**Example Structure:**
+
+```
+src/components/
+├── auth/
+│   ├── auth.module.ts
+│   ├── auth.service.ts
+│   ├── auth.resolver.ts
+│   └── user.service.ts
+├── business-card/
+│   ├── business.card.module.ts
+│   ├── business.card.service.ts
+│   └── business.card.resolver.ts
+├── feed/
+│   ├── feed.module.ts
+│   ├── feed.service.ts
+│   └── feed.resolver.ts
+├── friend/
+│   ├── friend.module.ts
+│   ├── friend.service.ts
+│   └── friend.resolver.ts
+├── group/
+│   ├── group.module.ts
+│   ├── group.service.ts
+│   └── group.resolver.ts
+└── user-profile/
+    ├── user-profile.module.ts
+    ├── user-profile.service.ts
+    └── user-profile.resolver.ts
+```
+
+## Service Layer Patterns
+
+### Repository Injection Pattern
+
+All services inject TypeORM repositories using `@InjectRepository`:
+
+```typescript
+@Injectable()
+export class AuthService {
+  constructor(
+    @InjectRepository(User) private userRepository: Repository<User>,
+  ) {}
+}
+
+// Complex services with multiple repositories
+@Injectable()
+export class FeedService {
+  constructor(
+    @InjectRepository(Feed)
+    private feedRepository: Repository<Feed>,
+    @InjectRepository(FeedLike)
+    private feedLikeRepository: Repository<FeedLike>,
+    @InjectRepository(FeedSharedWithFriend)
+    private feedSharedWithFriendRepository: Repository<FeedSharedWithFriend>,
+    @InjectRepository(FeedSharedWithGroup)
+    private feedSharedWithGroupRepository: Repository<FeedSharedWithGroup>,
+    @InjectRepository(Friend)
+    private friendRepository: Repository<Friend>,
+    @InjectRepository(Group)
+    private groupRepository: Repository<Group>,
+    @InjectRepository(UserProfile)
+    private userProfileRepository: Repository<UserProfile>,
+  ) {}
+}
+```
+
+### DTO Mapping Pattern
+
+Services always return typed DTOs, never raw entities:
+
+```typescript
+private mapToResponseDto(user: User): UserResponseDto {
+  return {
+    uid: user.uid,
+    email: user.email,
+    platform: user.platform,
+    // ... other fields
+  };
+}
+
+// Complex mapping with relationships
+private async mapToFeedResponseDto(
+  feed: Feed,
+  currentUserId: string,
+): Promise<FeedResponseDto> {
+  const userProfile = await this.userProfileRepository.findOne({
+    where: { uid: feed.userId },
+  });
+
+  const isLiked = await this.feedLikeRepository.findOne({
+    where: { feedId: feed.id, userId: currentUserId },
+  });
+
+  // Fetch shared data based on share scope
+  let sharedFeedWithFriends: UserProfileResponseDto[] | undefined;
+  let sharedFeedWithGroups: GroupResponseDto[] | undefined;
+
+  if (feed.shareScope === ShareScope.FRIENDS) {
+    sharedFeedWithFriends = await this.getFeedSharedWithFriendProfiles(feed.id);
+  }
+
+  if (feed.shareScope === ShareScope.GROUPS) {
+    sharedFeedWithGroups = await this.getFeedSharedWithGroups(feed.id);
+  }
+
+  return {
+    id: feed.id,
+    userId: feed.userId,
+    content: feed.content,
+    images: feed.images || [],
+    imageUrls: feed.imageUrls || [],
+    shareScope: feed.shareScope,
+    sharedFeedWithFriends,
+    sharedFeedWithGroups,
+    likeCount: feed.likeCount,
+    isLikedByCurrentUser: !!isLiked,
+    userProfile: this.mapToUserProfileResponseDto(userProfile),
+    createdAt: feed.createdAt,
+    updatedAt: feed.updatedAt,
+  };
+}
+```
+
+### Error Handling Pattern
+
+Use NestJS built-in exceptions with standardized messages:
+
+```typescript
+if (!existingCard) {
+  throw new NotFoundException(Message.BUSINESS_CARD_NOT_FOUND);
+}
+
+if (existingCard) {
+  throw new ConflictException(Message.BUSINESS_CARD_ALREADY_EXISTS);
+}
+
+// Social feature specific errors
+if (feed.userId !== userId) {
+  throw new BadRequestException(Message.CANNOT_EDIT_OTHERS_FEED);
+}
+
+if (userId === friendId) {
+  throw new BadRequestException(Message.CANNOT_ADD_SELF_AS_FRIEND);
+}
+```
+
+## GraphQL Resolver Patterns
+
+### Decorator Usage
+
+- `@Query()` for read operations
+- `@Mutation()` for write operations
+- `@Args()` for input parameters
+
+### Return Type Pattern
+
+All resolvers return Promise-wrapped DTOs:
+
+```typescript
+@Query(() => BusinessCardResponseDto)
+async getBusinessCardById(@Args('id') id: string): Promise<BusinessCardResponseDto> {
+  return this.businessCardService.getBusinessCardById(id);
+}
+
+// Complex queries with relationships
+@Query(() => [FeedResponseDto])
+async getAllVisibleFeeds(
+  @Args('userId') userId: string,
+): Promise<FeedResponseDto[]> {
+  return this.feedService.getAllVisibleFeeds(userId);
+}
+```
+
+### File Upload Handling
+
+Use GraphQL Upload for file operations:
+
+```typescript
+@Mutation(() => BusinessCardResponseDto)
+async createBusinessCard(
+  @Args('createBusinessCardInput') createBusinessCardDto: CreateBusinessCardDto,
+  @Args('profileImage', { type: () => GraphQLUpload }) profileImage?: FileUpload,
+): Promise<BusinessCardResponseDto>
+
+// Multiple file uploads for feeds
+@Mutation(() => FeedResponseDto)
+async createFeed(@Args('input') input: CreateFeedDto): Promise<FeedResponseDto>
+```
+
+## TypeORM Integration
+
+### Configuration
+
+- `autoLoadEntities: true` - Automatically load entity files
+- `synchronize: true` - Auto-sync schema (development only)
+- PostgreSQL as the database provider
+
+### Entity Registration
+
+Entities are automatically discovered and registered through the `autoLoadEntities` setting.
+
+## Module Dependencies
+
+### Core Dependencies
+
+- `@nestjs/common` - Core NestJS functionality
+- `@nestjs/graphql` - GraphQL integration
+- `@nestjs/typeorm` - TypeORM integration
+- `@nestjs/config` - Configuration management
+
+### GraphQL Setup
+
+- Apollo Driver for GraphQL server
+- Auto-schema file generation
+- File upload support disabled at GraphQL level (handled in resolvers)
+
+## Social Features Architecture
+
+### Feed Module Architecture
+
+```typescript
+@Module({
+  imports: [
+    TypeOrmModule.forFeature([
+      Feed,
+      FeedLike,
+      FeedSharedWithFriend,
+      FeedSharedWithGroup,
+      Friend,
+      FriendGroup,
+      Group,
+      UserProfile,
+    ]),
+  ],
+  providers: [FeedResolver, FeedService],
+  exports: [FeedService],
+})
+export class FeedModule {}
+```
+
+**Key Features:**
+
+- **Multi-Repository Pattern:** 7 repositories for complex relationships
+- **Visibility Logic:** Complex queries for feed visibility based on share scope
+- **Image Management:** Multi-image upload and processing
+- **Like System:** Denormalized counters for performance
+
+### Friend Module Architecture
+
+```typescript
+@Module({
+  imports: [TypeOrmModule.forFeature([Friend, User, UserProfile])],
+  providers: [FriendResolver, FriendService],
+  exports: [FriendService],
+})
+export class FriendModule {}
+```
+
+**Key Features:**
+
+- **Bidirectional Relationships:** Both directions of friendship stored
+- **Search Functionality:** Friend search with profile integration
+- **Group Integration:** Friends can belong to multiple groups
+
+### Group Module Architecture
+
+```typescript
+@Module({
+  imports: [
+    TypeOrmModule.forFeature([Group, FriendGroup, Friend, UserProfile]),
+  ],
+  providers: [GroupResolver, GroupService],
+  exports: [GroupService],
+})
+export class GroupModule {}
+```
+
+**Key Features:**
+
+- **Two Group Types:** CUSTOM (user-created) and INTEREST_BASED (auto-generated)
+- **Image Support:** Optional group images with compression
+- **Friend Management:** Add/remove friends from groups
+- **Interest Integration:** Automatic group creation from user interests
+
+## Complex Repository Patterns
+
+### Multi-Repository Services
+
+```typescript
+@Injectable()
+export class FeedService {
+  constructor(
+    @InjectRepository(Feed)
+    private feedRepository: Repository<Feed>,
+    @InjectRepository(FeedLike)
+    private feedLikeRepository: Repository<FeedLike>,
+    @InjectRepository(FeedSharedWithFriend)
+    private feedSharedWithFriendRepository: Repository<FeedSharedWithFriend>,
+    @InjectRepository(FeedSharedWithGroup)
+    private feedSharedWithGroupRepository: Repository<FeedSharedWithGroup>,
+    @InjectRepository(Friend)
+    private friendRepository: Repository<Friend>,
+    @InjectRepository(Group)
+    private groupRepository: Repository<Group>,
+    @InjectRepository(UserProfile)
+    private userProfileRepository: Repository<UserProfile>,
+  ) {}
+}
+```
+
+### QueryBuilder Usage
+
+```typescript
+// Complex visibility queries
+async getAllVisibleFeeds(userId: string): Promise<FeedResponseDto[]> {
+  const queryBuilder = this.feedRepository
+    .createQueryBuilder('feed')
+    .leftJoinAndSelect('feed.user', 'user')
+    .leftJoinAndSelect('user.userProfile', 'userProfile')
+    .leftJoinAndSelect('feed.likes', 'likes')
+    .leftJoinAndSelect('feed.sharedWithFriends', 'sharedWithFriends')
+    .leftJoinAndSelect('feed.sharedWithGroups', 'sharedWithGroups')
+    .where(
+      '(feed.userId = :userId OR ' + // User's own feeds
+        'feed.shareScope = :publicScope OR ' + // Public feeds
+        '(feed.shareScope = :friendsScope AND EXISTS ' + // Feeds shared with user as friend
+        '(SELECT 1 FROM feed_shared_with_friend fswf ' +
+        'WHERE fswf."feedId" = feed.id AND fswf."friendId" = :userId)) OR ' +
+        '(feed.shareScope = :groupsScope AND EXISTS ' + // Feeds shared with user's groups
+        '(SELECT 1 FROM feed_shared_with_group fswg ' +
+        'INNER JOIN friend_group fg ON fg."groupId" = fswg."groupId" ' +
+        'INNER JOIN friend f ON f.id = fg."friendId" ' +
+        'WHERE fswg."feedId" = feed.id AND f."userId" = :userId)))',
+      {
+        userId,
+        publicScope: ShareScope.PUBLIC,
+        friendsScope: ShareScope.FRIENDS,
+        groupsScope: ShareScope.GROUPS,
+      },
+    )
+    .orderBy('feed.createdAt', 'DESC');
+
+  const feeds = await queryBuilder.getMany();
+
+  return Promise.all(
+    feeds.map(feed => this.mapToFeedResponseDto(feed, userId)),
+  );
+}
+```
+
+### Junction Table Management
+
+```typescript
+// Create shared friend relationships for FRIENDS scope
+if (dto.shareScope === ShareScope.FRIENDS && dto.sharedFeedWithFriendIds) {
+  const friends = await this.friendRepository.find({
+    where: { id: In(dto.sharedFeedWithFriendIds) },
+    select: ['id', 'friendId'],
+  });
+
+  const sharedFriends = friends.map(friend => ({
+    feedId: savedFeed.id,
+    friendId: friend.friendId,
+  }));
+
+  await this.feedSharedWithFriendRepository.save(sharedFriends);
+}
+
+// Create shared group relationships for GROUPS scope
+if (dto.shareScope === ShareScope.GROUPS && dto.sharedFeedWithGroupIds) {
+  const sharedGroups = dto.sharedFeedWithGroupIds.map(groupId => ({
+    feedId: savedFeed.id,
+    groupId,
+  }));
+  await this.feedSharedWithGroupRepository.save(sharedGroups);
+}
+```
+
+## Service Patterns
+
+### Complex Visibility Checking
+
+```typescript
+private async checkFeedVisibility(
+  feed: Feed,
+  userId: string,
+): Promise<boolean> {
+  if (feed.shareScope === ShareScope.PUBLIC) {
+    return true;
+  }
+
+  if (feed.shareScope === ShareScope.FRIENDS) {
+    const sharedFriendExists =
+      await this.feedSharedWithFriendRepository.findOne({
+        where: { feedId: feed.id, friendId: userId },
+      });
+    return !!sharedFriendExists;
+  }
+
+  if (feed.shareScope === ShareScope.GROUPS) {
+    const groupMemberExists = await this.feedSharedWithGroupRepository
+      .createQueryBuilder('fsg')
+      .leftJoin('fsg.group', 'group')
+      .leftJoin('group.friendGroups', 'friendGroup')
+      .leftJoin('friendGroup.friend', 'friend')
+      .where('fsg.feedId = :feedId', { feedId: feed.id })
+      .andWhere('friend.userId = :userId', { userId })
+      .getOne();
+    return !!groupMemberExists;
+  }
+
+  return false;
+}
+```
+
+### Multi-Image Processing
+
+```typescript
+private async processImages(
+  images: Promise<any>[],
+  userId: string,
+): Promise<{ paths: string[]; urls: string[] }> {
+  const paths: string[] = [];
+  const urls: string[] = [];
+
+  for (const imagePromise of images) {
+    const uploadedFile = await imagePromise;
+    const fileBuffer = await this.streamToBuffer(
+      uploadedFile.createReadStream(),
+    );
+
+    // Validate and compress each image
+    const compressedBuffer = await this.compressImage(fileBuffer);
+    const imageName = getSerialForImage(uploadedFile.filename);
+    const uploadDir = `uploads/feed/${userId}`;
+    const filepath = `${uploadDir}/${imageName}`;
+
+    await fs.mkdir(uploadDir, { recursive: true });
+
+    // Save compressed image
+    const result = await new Promise((resolve, reject) => {
+      const writeStream = createWriteStream(filepath);
+      writeStream.write(compressedBuffer);
+      writeStream.end();
+      writeStream.on('finish', () => resolve(true));
+      writeStream.on('error', () => reject(false));
+    });
+
+    if (!result) throw new Error(Message.UPLOAD_FAILED);
+
+    paths.push(filepath);
+    urls.push(`/${filepath}`);
+  }
+
+  return { paths, urls };
+}
+```
+
+### Automatic Interest-Based Group Creation
+
+```typescript
+async autoCreateGroupsFromInterests(
+  userId: string,
+  interests: string[],
+): Promise<void> {
+  for (const interest of interests) {
+    const existingGroup = await this.groupRepository.findOne({
+      where: { userId, groupName: interest as InterestItem },
+    });
+
+    if (!existingGroup) {
+      const group = this.groupRepository.create({
+        userId,
+        groupName: interest as InterestItem,
+        groupType: GroupType.INTEREST_BASED,
+        isFavorite: false,
+      });
+      await this.groupRepository.save(group);
+    }
+  }
+}
+```
+
+### Denormalized Counter Management
+
+```typescript
+// Increment like count
+async likeFeed(feedId: string, userId: string): Promise<FeedLikeResponseDto> {
+  // Check if already liked
+  const existingLike = await this.feedLikeRepository.findOne({
+    where: { feedId, userId },
+  });
+
+  if (existingLike) {
+    throw new ConflictException(Message.FEED_ALREADY_LIKED);
+  }
+
+  // Create like record
+  const feedLike = this.feedLikeRepository.create({ feedId, userId });
+  const savedLike = await this.feedLikeRepository.save(feedLike);
+
+  // Increment like count
+  await this.feedRepository.increment({ id: feedId }, 'likeCount', 1);
+
+  return this.mapToFeedLikeResponseDto(savedLike);
+}
+
+// Decrement like count
+async unlikeFeed(feedId: string, userId: string): Promise<boolean> {
+  const like = await this.feedLikeRepository.findOne({
+    where: { feedId, userId },
+  });
+
+  if (!like) {
+    throw new NotFoundException(Message.FEED_NOT_LIKED);
+  }
+
+  await this.feedLikeRepository.remove(like);
+  await this.feedRepository.decrement({ id: feedId }, 'likeCount', 1);
+
+  return true;
+}
+```
+
+## Bidirectional Relationship Management
+
+### Friend Creation Pattern
+
+```typescript
+async addFriend(
+  userId: string,
+  friendId: string,
+): Promise<FriendResponseDto> {
+  if (userId === friendId) {
+    throw new BadRequestException(Message.CANNOT_ADD_SELF_AS_FRIEND);
+  }
+
+  // Validate friend user exists
+  const friendUser = await this.userRepository.findOne({
+    where: { uid: friendId },
+  });
+
+  if (!friendUser) {
+    throw new NotFoundException(Message.FRIEND_USER_NOT_FOUND);
+  }
+
+  // Check if relationship already exists
+  const existingRelationship = await this.friendRepository.findOne({
+    where: { userId, friendId },
+  });
+
+  if (existingRelationship) {
+    throw new ConflictException(Message.FRIEND_ALREADY_EXISTS);
+  }
+
+  // Create bidirectional friendship
+  const friendRelationship = this.friendRepository.create({
+    userId,
+    friendId,
+  });
+
+  const reverseFriendRelationship = this.friendRepository.create({
+    userId: friendId,
+    friendId: userId,
+  });
+
+  await this.friendRepository.save([
+    friendRelationship,
+    reverseFriendRelationship,
+  ]);
+
+  return this.mapToResponseDto(friendRelationship, friendProfile);
+}
+```
+
+### Friend Removal Pattern
+
+```typescript
+async removeFriend(userId: string, friendId: string): Promise<boolean> {
+  const relationships = await this.friendRepository.find({
+    where: [
+      { userId, friendId },
+      { userId: friendId, friendId: userId },
+    ],
+  });
+
+  if (relationships.length === 0) {
+    throw new NotFoundException(Message.FRIEND_NOT_FOUND);
+  }
+
+  await this.friendRepository.remove(relationships);
+  return true;
+}
+```
+
+## Architecture Patterns
+
+### Junction Table Management
+
+```typescript
+// Friend-Group relationships
+async addFriendToGroup(
+  addFriendToGroupDto: AddFriendToGroupDto,
+): Promise<boolean> {
+  const { friendId, groupId } = addFriendToGroupDto;
+
+  const existingAssociation = await this.friendGroupRepository.findOne({
+    where: { friendId, groupId },
+  });
+
+  if (existingAssociation) {
+    throw new ConflictException(Message.FRIEND_ALREADY_IN_GROUP);
+  }
+
+  const friendGroup = this.friendGroupRepository.create({
+    friendId,
+    groupId,
+  });
+
+  await this.friendGroupRepository.save(friendGroup);
+  return true;
+}
+```
+
+### Conditional Relationship Creation
+
+```typescript
+// Create relationships based on share scope
+if (dto.shareScope === ShareScope.FRIENDS && dto.sharedFeedWithFriendIds) {
+  // Validate friend relationships
+  const friendCount = await this.friendRepository.count({
+    where: {
+      id: In(dto.sharedFeedWithFriendIds),
+      userId: dto.userId,
+    },
+  });
+
+  if (friendCount !== dto.sharedFeedWithFriendIds.length) {
+    throw new BadRequestException(Message.FRIEND_USER_NOT_FOUND);
+  }
+
+  // Create shared friend relationships
+  const friends = await this.friendRepository.find({
+    where: { id: In(dto.sharedFeedWithFriendIds) },
+    select: ['id', 'friendId'],
+  });
+
+  const sharedFriends = friends.map(friend => ({
+    feedId: savedFeed.id,
+    friendId: friend.friendId,
+  }));
+
+  await this.feedSharedWithFriendRepository.save(sharedFriends);
+}
+```
+
+### Cascading Operations
+
+```typescript
+// Delete feed with all related records
+async deleteFeed(feedId: string, userId: string): Promise<boolean> {
+  const feed = await this.feedRepository.findOne({
+    where: { id: feedId },
+  });
+
+  if (!feed) {
+    throw new NotFoundException(Message.FEED_NOT_FOUND);
+  }
+
+  if (feed.userId !== userId) {
+    throw new BadRequestException(Message.CANNOT_EDIT_OTHERS_FEED);
+  }
+
+  // Delete all images from filesystem
+  if (feed.images && feed.images.length > 0) {
+    for (const imagePath of feed.images) {
+      await this.deleteFile(imagePath);
+    }
+  }
+
+  // Remove all related records (CASCADE handled by database)
+  await this.feedRepository.remove(feed);
+  return true;
+}
+```
+
+## Performance Considerations
+
+### Repository Optimization
+
+- **Multiple Repository Injection:** Services inject only necessary repositories
+- **QueryBuilder Usage:** Complex queries use QueryBuilder for optimization
+- **Denormalized Counters:** Like counts stored for fast retrieval
+- **Selective Loading:** Only load necessary relationships
+
+### Database Relationships
+
+- **CASCADE Deletes:** Automatic cleanup of related records
+- **Unique Constraints:** Prevent duplicate relationships
+- **Indexing Strategy:** Proper indexes on frequently queried fields
+
+### Service Architecture
+
+- **Separation of Concerns:** Each service handles specific domain logic
+- **DTO Mapping:** Consistent response format across all services
+- **Error Handling:** Standardized error messages and exception types
+- **Validation:** Input validation and business logic validation

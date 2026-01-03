@@ -1,0 +1,740 @@
+---
+title: GraphQL Conventions and DTO Patterns
+description: Documentation of GraphQL resolver patterns, DTO organization, and enum registration conventions used in the Netagram project
+tags:
+  [graphql, dto, resolvers, enums, apollo, feed, friend, group, social-features]
+---
+
+# GraphQL Conventions and DTO Patterns
+
+## DTO Organization Structure
+
+### Directory Structure
+
+DTOs are organized by feature in subdirectories:
+
+```
+src/libs/dto/
+├── auth/
+│   ├── auth.response.dto.ts
+│   ├── create.user.dto.ts
+│   ├── update.user.dto.ts
+│   ├── user.login.dto.ts
+│   └── user.response.dto.ts
+├── business-card/
+│   ├── business-card.response.dto.ts
+│   ├── create-business-card.dto.ts
+│   ├── update-business-card.dto.ts
+│   └── upload-image.response.dto.ts
+├── feed/
+│   ├── create-feed.dto.ts
+│   ├── update-feed.dto.ts
+│   ├── feed-response.dto.ts
+│   ├── feed-like-response.dto.ts
+│   └── feed-pagination.dto.ts
+├── friend/
+│   ├── add-friend.dto.ts
+│   ├── friend.response.dto.ts
+│   └── friend-list.response.dto.ts
+├── group/
+│   ├── add-friend-to-group.dto.ts
+│   ├── create-group.dto.ts
+│   ├── group.response.dto.ts
+│   ├── group-with-friends.response.dto.ts
+│   └── update-group.dto.ts
+└── user-profile/
+    ├── [user-profile DTOs]
+```
+
+### Naming Conventions
+
+**Input DTOs:**
+
+- `Create{Entity}Dto` - For creation operations
+- `Update{Entity}Dto` - For update operations
+- `{Entity}LoginDto` - For authentication operations
+- `Add{Entity}To{Entity}Dto` - For relationship operations
+
+**Response DTOs:**
+
+- `{Entity}ResponseDto` - Standard response format
+- `{Operation}ResponseDto` - Specific operation responses
+- `{Entity}With{Entity}ResponseDto` - Complex response with relationships
+
+**Examples:**
+
+- `CreateBusinessCardDto`, `CreateFeedDto`, `CreateGroupDto`
+- `UpdateUserDto`, `UpdateFeedDto`, `UpdateGroupDto`
+- `UserLoginDto`
+- `BusinessCardResponseDto`, `FeedResponseDto`, `GroupResponseDto`
+- `UploadImageResponseDto`, `FeedPaginationDto`
+- `AddFriendToGroupDto`
+
+## GraphQL Resolver Patterns
+
+### Query Resolvers
+
+```typescript
+@Query(() => BusinessCardResponseDto)
+async getBusinessCardById(@Args('id') id: string): Promise<BusinessCardResponseDto> {
+  return this.businessCardService.getBusinessCardById(id);
+}
+
+@Query(() => [BusinessCardResponseDto])
+async getAllBusinessCards(): Promise<BusinessCardResponseDto[]> {
+  return this.businessCardService.getAllBusinessCards();
+}
+
+// Feed queries with complex visibility
+@Query(() => [FeedResponseDto])
+async getAllVisibleFeeds(
+  @Args('userId') userId: string,
+): Promise<FeedResponseDto[]> {
+  return this.feedService.getAllVisibleFeeds(userId);
+}
+
+// Friend queries with search
+@Query(() => [FriendResponseDto])
+async searchFriends(
+  @Args('userId') userId: string,
+  @Args('searchTerm') searchTerm: string,
+): Promise<FriendResponseDto[]> {
+  return this.friendService.searchFriends(userId, searchTerm);
+}
+
+// Group queries with different types
+@Query(() => [GroupResponseDto])
+async getInterestBasedGroups(
+  @Args('userId') userId: string,
+): Promise<GroupResponseDto[]> {
+  return this.groupService.getInterestBasedGroups(userId);
+}
+```
+
+### Mutation Resolvers
+
+```typescript
+@Mutation(() => BusinessCardResponseDto)
+async createBusinessCard(
+  @Args('createBusinessCardInput') createBusinessCardDto: CreateBusinessCardDto,
+  @Args('profileImage', { type: () => GraphQLUpload }) profileImage?: FileUpload,
+): Promise<BusinessCardResponseDto> {
+  return this.businessCardService.createBusinessCard(createBusinessCardDto, profileImage);
+}
+
+// Feed creation with multiple images
+@Mutation(() => FeedResponseDto)
+async createFeed(@Args('input') input: CreateFeedDto): Promise<FeedResponseDto> {
+  return this.feedService.createFeed(input);
+}
+
+// Friend operations
+@Mutation(() => FriendResponseDto)
+async addFriend(
+  @Args('userId') userId: string,
+  @Args('friendId') friendId: string,
+): Promise<FriendResponseDto> {
+  return this.friendService.addFriend(userId, friendId);
+}
+
+// Group operations with image upload
+@Mutation(() => GroupResponseDto)
+async createGroup(
+  @Args('input') input: CreateGroupDto,
+): Promise<GroupResponseDto> {
+  return this.groupService.createGroup(input);
+}
+```
+
+### File Upload Pattern
+
+```typescript
+import { GraphQLUpload, FileUpload } from 'graphql-upload';
+
+// Single file upload
+@Args('profileImage', { type: () => GraphQLUpload }) profileImage?: FileUpload
+
+// Multiple file upload (for feeds)
+@Args('images', { type: () => [GraphQLUpload] }) images?: FileUpload[]
+```
+
+### Feed-Specific Patterns
+
+```typescript
+// Feed creation with multiple images
+@Mutation(() => FeedResponseDto)
+async createFeed(@Args('input') input: CreateFeedDto): Promise<FeedResponseDto> {
+  return this.feedService.createFeed(input);
+}
+
+// Feed update with image management
+@Mutation(() => FeedResponseDto)
+async updateFeed(
+  @Args('feedId') feedId: string,
+  @Args('userId') userId: string,
+  @Args('input') input: UpdateFeedDto,
+): Promise<FeedResponseDto> {
+  return this.feedService.updateFeed(feedId, userId, input);
+}
+
+// Like/Unlike operations
+@Mutation(() => FeedLikeResponseDto)
+async likeFeed(
+  @Args('feedId') feedId: string,
+  @Args('userId') userId: string,
+): Promise<FeedLikeResponseDto> {
+  return this.feedService.likeFeed(feedId, userId);
+}
+
+@Mutation(() => Boolean)
+async unlikeFeed(
+  @Args('feedId') feedId: string,
+  @Args('userId') userId: string,
+): Promise<boolean> {
+  return this.feedService.unlikeFeed(feedId, userId);
+}
+```
+
+### Friend-Specific Patterns
+
+```typescript
+// Bidirectional friend operations
+@Mutation(() => FriendResponseDto)
+async addFriend(
+  @Args('userId') userId: string,
+  @Args('friendId') friendId: string,
+): Promise<FriendResponseDto> {
+  return this.friendService.addFriend(userId, friendId);
+}
+
+@Mutation(() => Boolean)
+async removeFriend(
+  @Args('userId') userId: string,
+  @Args('friendId') friendId: string,
+): Promise<boolean> {
+  return this.friendService.removeFriend(userId, friendId);
+}
+
+// Friend queries with relationships
+@Query(() => [FriendResponseDto])
+async getFriendsByUserId(
+  @Args('userId') userId: string,
+): Promise<FriendResponseDto[]> {
+  return this.friendService.getFriendsByUserId(userId);
+}
+```
+
+### Group-Specific Patterns
+
+```typescript
+// Group management
+@Mutation(() => GroupResponseDto)
+async createGroup(
+  @Args('input') input: CreateGroupDto,
+): Promise<GroupResponseDto> {
+  return this.groupService.createGroup(input);
+}
+
+@Mutation(() => GroupResponseDto)
+async toggleFavorite(
+  @Args('groupId') groupId: string,
+): Promise<GroupResponseDto> {
+  return this.groupService.toggleFavorite(groupId);
+}
+
+// Friend-Group relationships
+@Mutation(() => Boolean)
+async addFriendToGroup(
+  @Args('input') input: AddFriendToGroupDto,
+): Promise<boolean> {
+  return this.groupService.addFriendToGroup(input);
+}
+
+@Mutation(() => Boolean)
+async removeFriendFromGroup(
+  @Args('friendId') friendId: string,
+  @Args('groupId') groupId: string,
+): Promise<boolean> {
+  return this.groupService.removeFriendFromGroup(friendId, groupId);
+}
+
+// Complex group queries
+@Query(() => GroupWithFriendsResponseDto)
+async getGroupWithFriends(
+  @Args('groupId') groupId: string,
+): Promise<GroupWithFriendsResponseDto> {
+  return this.groupService.getGroupWithFriends(groupId);
+}
+```
+
+## Enum Registration
+
+### Enum Definition Pattern
+
+All enums are registered with GraphQL schema using `registerEnumType`:
+
+```typescript
+import { registerEnumType } from '@nestjs/graphql';
+
+export enum TemplateType {
+  TEMPLATE_1 = 'TEMPLATE_1',
+  TEMPLATE_2 = 'TEMPLATE_2',
+  TEMPLATE_3 = 'TEMPLATE_3',
+  TEMPLATE_4 = 'TEMPLATE_4',
+}
+
+registerEnumType(TemplateType, {
+  name: 'TemplateType',
+});
+
+// ShareScope enum for feed visibility
+export enum ShareScope {
+  PUBLIC = 'PUBLIC',
+  FRIENDS = 'FRIENDS',
+  GROUPS = 'GROUPS',
+}
+
+registerEnumType(ShareScope, {
+  name: 'ShareScope',
+  description: 'Defines the visibility scope for feed posts',
+});
+
+// GroupType enum for group categorization
+export enum GroupType {
+  INTEREST_BASED = 'INTEREST_BASED',
+  CUSTOM = 'CUSTOM',
+}
+
+registerEnumType(GroupType, {
+  name: 'GroupType',
+  description:
+    'Defines whether a group is automatically created from interests or user-created',
+});
+```
+
+### Interest System Enums
+
+The project uses a sophisticated interest categorization system:
+
+```typescript
+export enum InterestCategory {
+  OUTDOOR_TRAVEL = '아웃도어/여행',
+  EXERCISE_SPORTS = '운동/스포츠',
+  HUMANITIES_BOOKS_LANGUAGE = '인문학/책/언어',
+  // ... 12 total categories with Korean translations
+}
+
+export enum InterestItem {
+  HIKING = '등산',
+  CAMPING = '캠핑',
+  TRAVEL = '여행',
+  // ... 75+ specific interest items
+}
+
+registerEnumType(InterestCategory, { name: 'InterestCategory' });
+registerEnumType(InterestItem, { name: 'InterestItem' });
+```
+
+### Message Enum
+
+Standardized error messages for consistent API responses:
+
+```typescript
+export enum Message {
+  SOMETHING_WENT_WRONG = 'Something went wrong!',
+  NO_DATA_FOUND = 'No data found!',
+  USER_NOT_FOUND = 'User not found',
+  BUSINESS_CARD_NOT_FOUND = 'Business card not found',
+  INVALID_IMAGE_FORMAT = 'Invalid image format. Only jpg and png files are allowed',
+
+  // Feed-specific messages
+  FEED_NOT_FOUND = 'Feed not found',
+  FEED_ALREADY_LIKED = 'Feed already liked by this user',
+  FEED_NOT_LIKED = 'Feed not liked by this user',
+  MAX_IMAGES_EXCEEDED = 'Maximum number of images (5) exceeded',
+  CANNOT_EDIT_OTHERS_FEED = 'Cannot edit feed created by another user',
+  INVALID_SHARE_SCOPE = 'Invalid share scope for this operation',
+  NO_FRIENDS_SELECTED = 'No friends selected for FRIENDS share scope',
+  NO_GROUPS_SELECTED = 'No groups selected for GROUPS share scope',
+
+  // Friend-specific messages
+  FRIEND_ALREADY_EXISTS = 'Friend relationship already exists',
+  FRIEND_NOT_FOUND = 'Friend relationship not found',
+  CANNOT_ADD_SELF_AS_FRIEND = 'Cannot add yourself as a friend',
+  FRIEND_USER_NOT_FOUND = 'Friend user not found',
+
+  // Group-specific messages
+  GROUP_ALREADY_EXISTS = 'Group with this name already exists for this user',
+  GROUP_NOT_FOUND = 'Group not found',
+  FRIEND_ALREADY_IN_GROUP = 'Friend is already in this group',
+  FRIEND_NOT_IN_GROUP = 'Friend is not in this group',
+  CANNOT_DELETE_INTEREST_BASED_GROUP = 'Cannot delete interest-based groups. Remove the interest from your profile instead.',
+
+  // User profile messages
+  USER_PROFILE_ALREADY_EXISTS = 'User profile already exists for this user',
+  USER_PROFILE_NOT_FOUND = 'User profile not found',
+
+  // Validation messages
+  INVALID_KOREAN_NAME = 'Invalid Korean name format',
+  INVALID_ENGLISH_NAME = 'Invalid English name format',
+  INVALID_PHONE_FORMAT = 'Invalid phone number format. Use 010-####-####',
+  IMAGE_TOO_LARGE = 'Image file is too large. Maximum size is 10MB',
+}
+```
+
+## Response DTO Patterns
+
+### Standard Response Structure
+
+All response DTOs follow a consistent pattern:
+
+```typescript
+export class BusinessCardResponseDto {
+  id: string;
+  uid: string;
+  nameKorean: string;
+  nameEnglish: string;
+  phoneNumber: string;
+  email: string;
+  profileImage?: string;
+  profileImageUrl?: string;
+  templateType?: TemplateType;
+  isActive: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export class FeedResponseDto {
+  id: string;
+  userId: string;
+  content: string;
+  images: string[];
+  imageUrls: string[];
+  shareScope: ShareScope;
+  sharedFeedWithFriends?: UserProfileResponseDto[];
+  sharedFeedWithGroups?: GroupResponseDto[];
+  sharedFeedWithFriendCount?: number;
+  sharedFeedWithGroupCount?: number;
+  likeCount: number;
+  isLikedByCurrentUser: boolean;
+  userProfile: UserProfileResponseDto;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export class FriendResponseDto {
+  id: string;
+  userId: string;
+  friendId: string;
+  friendProfile: UserProfileResponseDto;
+  groupCategory: string | null;
+  customGroupName: string;
+  groupDisplayName: string;
+  groups: GroupResponseDto[];
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export class GroupResponseDto {
+  id: string;
+  userId: string;
+  groupName: string;
+  groupType: GroupType;
+  isFavorite: boolean;
+  groupImage?: string;
+  groupImageUrl?: string;
+  friendCount: number;
+  createdAt: Date;
+  updatedAt: Date;
+}
+```
+
+### Complex Response DTOs
+
+For complex relationships, specialized response DTOs are used:
+
+```typescript
+export class GroupWithFriendsResponseDto {
+  id: string;
+  userId: string;
+  groupName: string;
+  groupType: GroupType;
+  isFavorite: boolean;
+  groupImage?: string;
+  groupImageUrl?: string;
+  friends: FriendResponseDto[];
+  friendCount: number;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export class FeedLikeResponseDto {
+  id: string;
+  feedId: string;
+  userId: string;
+  userProfile: UserProfileResponseDto;
+  createdAt: Date;
+}
+```
+
+### Service Mapping Pattern
+
+Services always map entities to DTOs:
+
+```typescript
+private mapToResponseDto(businessCard: BusinessCard): BusinessCardResponseDto {
+  return {
+    id: businessCard.id,
+    uid: (businessCard as any).uid,
+    nameKorean: businessCard.nameKorean,
+    nameEnglish: businessCard.nameEnglish,
+    // ... map all fields
+    profileImageUrl: businessCard.profileImage
+      ? `/${businessCard.profileImage}`
+      : null,
+  };
+}
+
+private async mapToFeedResponseDto(
+  feed: Feed,
+  currentUserId: string,
+): Promise<FeedResponseDto> {
+  const userProfile = await this.userProfileRepository.findOne({
+    where: { uid: feed.userId },
+  });
+
+  const isLiked = await this.feedLikeRepository.findOne({
+    where: { feedId: feed.id, userId: currentUserId },
+  });
+
+  // Fetch shared data based on share scope
+  let sharedFeedWithFriends: UserProfileResponseDto[] | undefined;
+  let sharedFeedWithGroups: GroupResponseDto[] | undefined;
+
+  if (feed.shareScope === ShareScope.FRIENDS) {
+    sharedFeedWithFriends = await this.getFeedSharedWithFriendProfiles(feed.id);
+  }
+
+  if (feed.shareScope === ShareScope.GROUPS) {
+    sharedFeedWithGroups = await this.getFeedSharedWithGroups(feed.id);
+  }
+
+  return {
+    id: feed.id,
+    userId: feed.userId,
+    content: feed.content,
+    images: feed.images || [],
+    imageUrls: feed.imageUrls || [],
+    shareScope: feed.shareScope,
+    sharedFeedWithFriends,
+    sharedFeedWithGroups,
+    likeCount: feed.likeCount,
+    isLikedByCurrentUser: !!isLiked,
+    userProfile: this.mapToUserProfileResponseDto(userProfile),
+    createdAt: feed.createdAt,
+    updatedAt: feed.updatedAt,
+  };
+}
+```
+
+## GraphQL Configuration
+
+### Apollo Driver Setup
+
+```typescript
+GraphQLModule.forRoot({
+  driver: ApolloDriver,
+  uploads: false, // Handled manually in resolvers
+  autoSchemaFile: true,
+});
+```
+
+### Key Features
+
+- **Auto Schema Generation:** Schema is automatically generated from decorators
+- **File Upload Handling:** Manual handling in resolvers (not at GraphQL level)
+- **Type Safety:** Full TypeScript integration with generated types
+- **Complex Queries:** Support for visibility-based queries and relationships
+
+## Error Handling
+
+### Exception Types
+
+Use NestJS built-in exceptions with enum messages:
+
+```typescript
+if (!businessCard) {
+  throw new NotFoundException(Message.BUSINESS_CARD_NOT_FOUND);
+}
+
+if (existingCard) {
+  throw new ConflictException(Message.BUSINESS_CARD_ALREADY_EXISTS);
+}
+
+if (!this.validateImage(file)) {
+  throw new BadRequestException(Message.INVALID_IMAGE_FORMAT);
+}
+
+// Feed-specific errors
+if (feed.userId !== userId) {
+  throw new BadRequestException(Message.CANNOT_EDIT_OTHERS_FEED);
+}
+
+if (images.length > 5) {
+  throw new BadRequestException(Message.MAX_IMAGES_EXCEEDED);
+}
+
+// Friend-specific errors
+if (userId === friendId) {
+  throw new BadRequestException(Message.CANNOT_ADD_SELF_AS_FRIEND);
+}
+
+// Group-specific errors
+if (group.groupType === GroupType.INTEREST_BASED) {
+  throw new BadRequestException(Message.CANNOT_DELETE_INTEREST_BASED_GROUP);
+}
+```
+
+### Validation Pattern
+
+- Input validation through DTOs with class-validator
+- Business logic validation in services
+- Consistent error messages through Message enum
+- Complex validation for social features (friendship, sharing, visibility)
+
+## Social Features Integration
+
+### Feed Visibility System
+
+The feed system implements complex visibility rules:
+
+```typescript
+// Visibility checking in services
+private async checkFeedVisibility(feed: Feed, userId: string): Promise<boolean> {
+  if (feed.shareScope === ShareScope.PUBLIC) {
+    return true;
+  }
+
+  if (feed.shareScope === ShareScope.FRIENDS) {
+    const sharedFriendExists = await this.feedSharedWithFriendRepository.findOne({
+      where: { feedId: feed.id, friendId: userId },
+    });
+    return !!sharedFriendExists;
+  }
+
+  if (feed.shareScope === ShareScope.GROUPS) {
+    const groupMemberExists = await this.feedSharedWithGroupRepository
+      .createQueryBuilder('fsg')
+      .leftJoin('fsg.group', 'group')
+      .leftJoin('group.friendGroups', 'friendGroup')
+      .leftJoin('friendGroup.friend', 'friend')
+      .where('fsg.feedId = :feedId', { feedId: feed.id })
+      .andWhere('friend.userId = :userId', { userId })
+      .getOne();
+    return !!groupMemberExists;
+  }
+
+  return false;
+}
+```
+
+### Bidirectional Friendship System
+
+```typescript
+// Both directions of friendship stored
+const friendRelationship = this.friendRepository.create({
+  userId,
+  friendId,
+});
+
+const reverseFriendRelationship = this.friendRepository.create({
+  userId: friendId,
+  friendId: userId,
+});
+
+await this.friendRepository.save([
+  friendRelationship,
+  reverseFriendRelationship,
+]);
+```
+
+### Interest-Based Group Management
+
+```typescript
+// Automatic group creation from interests
+async autoCreateGroupsFromInterests(userId: string, interests: string[]): Promise<void> {
+  for (const interest of interests) {
+    const existingGroup = await this.groupRepository.findOne({
+      where: { userId, groupName: interest as InterestItem },
+    });
+
+    if (!existingGroup) {
+      const group = this.groupRepository.create({
+        userId,
+        groupName: interest as InterestItem,
+        groupType: GroupType.INTEREST_BASED,
+        isFavorite: false,
+      });
+      await this.groupRepository.save(group);
+    }
+  }
+}
+```
+
+## Multi-Image Upload Patterns
+
+### Feed Image Management
+
+```typescript
+// CreateFeedDto with multiple images
+export class CreateFeedDto {
+  userId: string;
+  content: string;
+  images?: Promise<FileUpload>[];
+  shareScope: ShareScope;
+  sharedFeedWithFriendIds?: string[];
+  sharedFeedWithGroupIds?: string[];
+}
+
+// UpdateFeedDto with image management
+export class UpdateFeedDto {
+  content?: string;
+  shareScope?: ShareScope;
+  sharedFeedWithFriendIds?: string[];
+  sharedFeedWithGroupIds?: string[];
+  removeImageIndices?: number[];
+  addImages?: Promise<FileUpload>[];
+}
+```
+
+### Image Processing in Services
+
+```typescript
+// Multi-image processing
+private async processImages(
+  images: Promise<any>[],
+  userId: string,
+): Promise<{ paths: string[]; urls: string[] }> {
+  const paths: string[] = [];
+  const urls: string[] = [];
+
+  for (const imagePromise of images) {
+    const uploadedFile = await imagePromise;
+    const fileBuffer = await this.streamToBuffer(uploadedFile.createReadStream());
+
+    // Validate and compress each image
+    const compressedBuffer = await this.compressImage(fileBuffer);
+    const imageName = getSerialForImage(uploadedFile.filename);
+    const uploadDir = `uploads/feed/${userId}`;
+    const filepath = `${uploadDir}/${imageName}`;
+
+    // Save to filesystem
+    await this.saveImageFile(compressedBuffer, filepath);
+
+    paths.push(filepath);
+    urls.push(`/${filepath}`);
+  }
+
+  return { paths, urls };
+}
+```

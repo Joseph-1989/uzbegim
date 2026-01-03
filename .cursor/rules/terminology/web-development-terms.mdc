@@ -1,0 +1,90 @@
+---
+title: Web Development Terminology Standards
+description: Standardized terminology for web development concepts to ensure consistent and precise communication
+tags: [terminology, web-development, standards, communication]
+---
+
+# Web Development Terminology Standards
+
+## Core Instruction
+
+Always use precise technical terminology for web development concepts. When the user uses incorrect or generic terms, gently correct them and use the proper terminology in responses to reinforce learning.
+
+## File Type & Extension Corrections
+
+- `.html` files → "HTML file" or "HTML document"
+- `.css` files → "CSS file", "stylesheet", or "CSS stylesheet"
+- `.js` files → "JavaScript file" or "JS file"
+- `.ts` files → "TypeScript file"
+- `.jsx` files → "JSX file" or "React component file"
+- `.tsx` files → "TSX file" or "React TypeScript component file"
+- `.py` files → "Python file" or "Python script"
+- `.json` files → "JSON file" or "configuration file" (when config)
+- `.md` files → "Markdown file"
+- `.scss/.sass` files → "Sass file" or "SCSS stylesheet"
+- `.vue` files → "Vue component file"
+
+## Frontend Framework Terms
+
+- **React**: Component, JSX, props, state, hooks, virtual DOM
+- **Vue**: Component, template, reactive data, directives, single-file component
+- **Angular**: Component, service, directive, module, dependency injection
+- **Svelte**: Component, reactive statements, stores
+
+## Backend Terms
+
+- **Server** → Web server, application server, or API server
+- **Endpoint** → API endpoint or route
+- **Route** → URL route or routing path
+- **Middleware** → Express middleware, request middleware
+- **Controller** → Route handler or controller function
+- **Model** → Data model or database model
+- **View** → Template or view template
+
+## Database Terms
+
+- **Schema** → Database schema or table structure
+- **Query** → Database query or SQL query
+- **Migration** → Database migration
+- **Seed** → Database seed or seed data
+
+## Build Tools & Configuration
+
+- `package.json` → "Package manifest" or "npm configuration file"
+- `webpack.config.js` → "Webpack configuration file"
+- `vite.config.js` → "Vite configuration file"
+- `.env` files → "Environment file" or "environment variables file"
+- `tsconfig.json` → "TypeScript configuration file"
+
+## Web Architecture Terms
+
+- **Client-side** → Frontend or browser-side
+- **Server-side** → Backend or server-side
+- **API** → Application Programming Interface
+- **REST** → RESTful API or REST endpoint
+- **GraphQL** → GraphQL API or GraphQL schema
+- **SPA** → Single Page Application
+- **SSR** → Server-Side Rendering
+- **SSG** → Static Site Generation
+
+## Hosting & Deployment Terms
+
+- **Deploy** → Deployment or production deployment
+- **Build** → Production build or build process
+- **Bundle** → Application bundle or build output
+- **CDN** → Content Delivery Network
+- **Domain** → Domain name or website domain
+
+## Response Format Examples
+
+### Instead of: "In your file..."
+
+### Use: "In your JavaScript file `app.js`..." or "In your React component `Header.jsx`..."
+
+### Instead of: "Your code..."
+
+### Use: "Your React component..." or "Your API endpoint..."
+
+## Goal
+
+Help user internalize correct web development vocabulary through consistent, gentle correction and proper usage in all responses, covering both frontend and backend terminology.

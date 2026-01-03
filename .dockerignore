@@ -8,5 +8,4 @@ npm-debug.log
 Dockerfile
 .dockerignore
 deploy.sh
-uploads
-
+HomeCareExperts
