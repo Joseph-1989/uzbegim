@@ -14,12 +14,25 @@ import { T } from "./libs/types/common";
 
 const MongoDBStore = ConnectMongoDB(session); // Connect MongoDB session store to Express Session
 const store = new MongoDBStore({
-  uri: String(process.env.MONGO_URL), // || "mongodb://localhost/gallery",
+  uri: String(process.env.MONGO_URL),
   collection: "sessions",
+});
+
+console.log("App Loaded: MONGO_URL=", process.env.MONGO_URL);
+
+// Handle store errors
+store.on("error", function (error) {
+  console.log("Session Store Error:", error);
+});
+
+// Wait for store to connect
+store.on("connected", function () {
+  console.log("Session Store Connected Successfully");
 });
 
 // #1-ENTRENCE
 const app = express();
+app.set("trust proxy", 1); // Trust first proxy (required for Cloud Run/Heroku etc)
 app.use(express.static(path.join(__dirname, "public"))); // for  static files (css, js) in public folder
 app.use("/uploads", express.static("./uploads")); // __dirname is a special variable in Node.js that represents the directory name of the current module. It provides the absolute path of the directory containing the JavaScript file being executed.
 app.use(express.urlencoded({ extended: true })); // for parsing application/x-www-form-urlencoded
@@ -34,15 +47,20 @@ app.use(cookieParser());
 app.use(morgan(MORGAN_FORMAT)); // log request to console
 
 // #2-SESSIONS
+console.log("SESSION_SECRET present:", !!process.env.SESSION_SECRET);
+
 app.use(
   session({
-    secret: String(process.env.SESSION_SECRET), // "This is a secret",
+    secret: String(process.env.SESSION_SECRET),
     cookie: {
       maxAge: 1000 * 3600 * 3, // 3 HOURS
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production", // Use secure cookies in production
+      sameSite: "lax",
     },
     store: store,
-    resave: true,
-    saveUninitialized: true,
+    resave: false, // Changed from true to false (recommended)
+    saveUninitialized: false, // Changed from true to false (recommended)
   })
 );
 

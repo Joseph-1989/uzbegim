@@ -86,6 +86,8 @@ restaurantController.processLogin = async (
     // TODO: SESSIONS ATHENTICATION
     req.session.member = result; //save the returned value from service layer into session object
     req.session.save(function () {
+      console.log("processLogin: Session Saved. ID:", req.sessionID);
+      console.log("processLogin: Cookie:", req.session.cookie);
       res.redirect("/admin/product/all");
     }); //send the response data back to client-side
   } catch (err) {
@@ -167,6 +169,9 @@ restaurantController.verifyRestaurant = (
     req.member = req.session.member;
     next();
   } else {
+    console.log("verifyRestaurant failed. session:", req.session);
+    console.log("verifyRestaurant failed. sessionID:", req.sessionID);
+    console.log("verifyRestaurant failed. session.member:", req.session?.member);
     const message = Message.NOT_AUTHENTICATED;
     res.send(
       `<script>alert(" ${message}"); window.location.replace("/admin/login");</script>`

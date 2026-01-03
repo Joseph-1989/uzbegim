@@ -61,7 +61,9 @@ class MemberService {
     if (!isMatch) {
       throw new Errors(HttpCode.UNAUTHORIZED, Message.WRONG_PASSWORD);
     }
-    return await this.memberModel.findById(member._id).lean().exec();
+    const result = await this.memberModel.findById(member._id).lean().exec();
+    if (!result) throw new Errors(HttpCode.NOT_FOUND, Message.NO_DATA_FOUND);
+    return result as unknown as Member;
   }
 
   // getMemberDetail =========================================================
@@ -108,13 +110,13 @@ class MemberService {
 
   // getRestaurant =========================================================
 
-  public async getRestaurant(): Promise<Member[]> {
+  public async getRestaurant(): Promise<Member> {
     const result = await this.memberModel
       .findOne({ memberType: MemberType.RESTAURANT })
       .lean()
       .exec();
     if (!result) throw new Errors(HttpCode.NOT_FOUND, Message.NO_DATA_FOUND);
-    return result;
+    return result as unknown as Member;
   }
 
   // addUserPoint =========================================================
