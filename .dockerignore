@@ -9,3 +9,4 @@ Dockerfile
 .dockerignore
 deploy.sh
 HomeCareExperts
+DEPLOYMENT_GUIDE.md

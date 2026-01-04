@@ -46,7 +46,8 @@ COPY --from=builder --chown=nestjs:nodejs /app/dist ./dist
 COPY --chown=nestjs:nodejs package.json ./
 
 # Create uploads directory structure (uploads is git-ignored, so we create it here)
-RUN mkdir -p uploads/members uploads/products && chown -R nestjs:nodejs uploads
+# Copy uploads directory including existing images
+COPY --chown=nestjs:nodejs uploads ./uploads
 
 # Switch to non-root user
 USER nestjs

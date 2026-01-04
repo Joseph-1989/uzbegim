@@ -2,7 +2,10 @@ node_modules
 dist
 .env
 .env.production
-uploads
+.git
 .DS_Store
+npm-debug.log
+.dockerignore
+deploy.sh
 HomeCareExperts
 DEPLOYMENT_GUIDE.md
