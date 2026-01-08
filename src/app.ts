@@ -34,7 +34,8 @@ store.on("connected", function () {
 const app = express();
 app.set("trust proxy", 1); // Trust first proxy (required for Cloud Run/Heroku etc)
 app.use(express.static(path.join(__dirname, "public"))); // for  static files (css, js) in public folder
-app.use("/uploads", express.static("./uploads")); // __dirname is a special variable in Node.js that represents the directory name of the current module. It provides the absolute path of the directory containing the JavaScript file being executed.
+// Files are now served from Google Cloud Storage, no need for local uploads serving
+// app.use("/uploads", express.static("./uploads"));
 app.use(express.urlencoded({ extended: true })); // for parsing application/x-www-form-urlencoded
 app.use(express.json()); // for parsing application/json
 app.use(

@@ -6,3 +6,5 @@ uploads
 .DS_Store
 HomeCareExperts
 DEPLOYMENT_GUIDE.md
+MIGRATION_GUIDE.md
+src/migrate-images.ts

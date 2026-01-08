@@ -45,9 +45,8 @@ COPY --from=builder --chown=nestjs:nodejs /app/dist ./dist
 # Copy package.json for runtime reference
 COPY --chown=nestjs:nodejs package.json ./
 
-# Create uploads directory structure (uploads is git-ignored, so we create it here)
-# Copy uploads directory including existing images
-COPY --chown=nestjs:nodejs uploads ./uploads
+# No longer copying uploads directory - files are now stored in Google Cloud Storage
+# COPY --chown=nestjs:nodejs uploads ./uploads
 
 # Switch to non-root user
 USER nestjs
